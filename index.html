@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>KasKu — Catatan Keuangan</title>
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#059669" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="KasKu" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <link rel="stylesheet" href="./style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="top-bar">
+      <h1 id="pageTitle">Beranda</h1>
+      <div class="top-right">
+        <span id="offlineBadge" class="offline-badge">Offline</span>
+        <button id="installPwaBtn" class="install-btn" onclick="triggerInstallPWA()">+ Install</button>
+        <div class="date-badge" id="todayDateBadge"></div>
+      </div>
+    </header>
+
+    <!-- PAGE 1: BERANDA -->
+    <main id="page-beranda" class="page active">
+      <section class="card hero-card">
+        <div class="hero-label">Bersih Hari Ini (Masuk - Keluar)</div>
+        <div class="hero-amount" id="homeNetToday">Rp 0</div>
+        <div class="hero-grid">
+          <div>
+            <div class="hero-stat-label">Masuk Hari Ini</div>
+            <div class="hero-stat-val" id="homeInToday">Rp 0</div>
+          </div>
+          <div>
+            <div class="hero-stat-label">Keluar Hari Ini</div>
+            <div class="hero-stat-val" id="homeOutToday">Rp 0</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="quick-grid">
+        <button class="quick-btn" onclick="openTxModal('masuk', 'Gaji')">
+          <span class="quick-icon bg-in">💵</span>
+          Masuk
+        </button>
+        <button class="quick-btn" onclick="openTxModal('keluar', 'Makan')">
+          <span class="quick-icon bg-food">🍽️</span>
+          Makan
+        </button>
+        <button class="quick-btn" onclick="openTxModal('keluar', 'Ongkos')">
+          <span class="quick-icon bg-out">🚌</span>
+          Keluar
+        </button>
+        <button class="quick-btn" onclick="openDebtModal()">
+          <span class="quick-icon bg-debt">📋</span>
+          Hutang
+        </button>
+      </section>
+
+      <section class="two-col">
+        <div class="mini-card" onclick="goToDebtSection()">
+          <div class="mini-label">📋 Hutang Aktif</div>
+          <div class="mini-val text-danger" id="homeTotalDebt">Rp 0</div>
+          <div class="mini-hint" id="homeDebtCount">0 belum lunas</div>
+        </div>
+        <div class="mini-card" onclick="switchTab('analisa')">
+          <div class="mini-label">💸 Keluar Bulan Ini</div>
+          <div class="mini-val text-warn" id="homeOutMonth">Rp 0</div>
+          <div class="mini-hint" id="homeMonthBudget">Anggaran: Rp 0</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <span class="card-title">Target Bersih</span>
+          <span class="link-action" onclick="switchTab('profil')">Atur Target</span>
+        </div>
+        <div class="target-row">
+          <div class="target-meta">
+            <span>Harian</span>
+            <strong id="targetDailyText">Rp 0 / Rp 0 (0%)</strong>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="targetDailyBar"></div></div>
+        </div>
+        <div class="target-row">
+          <div class="target-meta">
+            <span>Mingguan (7 Hari)</span>
+            <strong id="targetWeeklyText">Rp 0 / Rp 0 (0%)</strong>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="targetWeeklyBar"></div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <span class="card-title">Grafik 7 Hari Terakhir</span>
+          <span class="card-sub">Masuk vs Keluar</span>
+        </div>
+        <div class="chart-wrap"><canvas id="chart7Days"></canvas></div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <span class="card-title">Transaksi Terbaru</span>
+          <span class="link-action" onclick="switchTab('riwayat')">Lihat Semua</span>
+        </div>
+        <div id="homeRecentList"></div>
+      </section>
+    </main>
+
+    <!-- PAGE 2: RIWAYAT -->
+    <main id="page-riwayat" class="page">
+      <div class="seg-toggle">
+        <button class="seg-btn active" id="subtab-tx-btn" onclick="switchHistorySubtab('tx')">Mutasi Kas</button>
+        <button class="seg-btn" id="subtab-debt-btn" onclick="switchHistorySubtab('debt')">Daftar Hutang</button>
+      </div>
+
+      <div id="history-tx-view">
+        <input type="text" class="input-field" id="searchTx" placeholder="Cari catatan atau kategori..." oninput="renderHistory()" />
+        <div class="chip-row" id="filterChips">
+          <button class="chip active" onclick="setHistoryFilter('semua', this)">Semua</button>
+          <button class="chip" onclick="setHistoryFilter('masuk', this)">Masuk</button>
+          <button class="chip" onclick="setHistoryFilter('keluar', this)">Keluar</button>
+          <button class="chip" onclick="setHistoryFilter('Makan', this)">Makan</button>
+          <button class="chip" onclick="setHistoryFilter('Jajan', this)">Jajan</button>
+          <button class="chip" onclick="setHistoryFilter('Ongkos', this)">Ongkos</button>
+          <button class="chip" onclick="setHistoryFilter('Laundry', this)">Laundry</button>
+          <button class="chip" onclick="setHistoryFilter('Sekolah Anak', this)">Sekolah Anak</button>
+        </div>
+        <div class="card" style="margin-top:10px"><div id="historyTxList"></div></div>
+      </div>
+
+      <div id="history-debt-view" style="display:none">
+        <button class="btn btn-primary" style="margin-bottom:14px" onclick="openDebtModal()">+ Tambah Catatan Hutang</button>
+        <div id="debtListContainer"></div>
+      </div>
+    </main>
+
+    <!-- PAGE 3: ANALISA -->
+    <main id="page-analisa" class="page">
+      <div class="card">
+        <label class="form-label">Pilih Bulan Laporan</label>
+        <input type="month" class="input-field" id="analyticsMonth" onchange="renderAnalytics()" />
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Ringkasan Bulanan</span>
+          <span class="card-sub" id="analyticsSavingsRate">Rasio Bersih: 0%</span>
+        </div>
+        <div class="analytics-grid">
+          <div class="stat-box">
+            <div class="lbl">Total Masuk</div>
+            <div class="val amt-in" id="anTotalIn">Rp 0</div>
+          </div>
+          <div class="stat-box">
+            <div class="lbl">Total Keluar</div>
+            <div class="val amt-out" id="anTotalOut">Rp 0</div>
+          </div>
+          <div class="stat-box">
+            <div class="lbl">Saldo Bersih</div>
+            <div class="val" id="anTotalNet">Rp 0</div>
+          </div>
+          <div class="stat-box">
+            <div class="lbl">Sekolah Anak</div>
+            <div class="val text-info" id="anTotalSchool">Rp 0</div>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="exportMonthlyPDF()">📄 Export PDF Bulanan</button>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Komposisi Pengeluaran</span>
+          <span class="card-sub">Per Kategori</span>
+        </div>
+        <div class="chart-wrap" style="height:220px"><canvas id="chartCategory"></canvas></div>
+        <div id="categoryBreakdownList" style="margin-top:12px"></div>
+      </div>
+    </main>
+
+    <!-- PAGE 4: PROFIL -->
+    <main id="page-profil" class="page">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Target & Anggaran</span></div>
+        <div class="form-group">
+          <label class="form-label">Nama Akun / Catatan</label>
+          <input type="text" class="input-field" id="setUserName" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Target Bersih Harian (Rp)</label>
+          <input type="number" class="input-field" id="setTargetDaily" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Target Bersih Mingguan (Rp)</label>
+          <input type="number" class="input-field" id="setTargetWeekly" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Anggaran Pengeluaran Bulanan (Rp)</label>
+          <input type="number" class="input-field" id="setMonthBudget" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nominal Gaji Standar (Rp)</label>
+          <input type="number" class="input-field" id="setDefaultSalary" />
+        </div>
+        <button class="btn btn-primary" onclick="saveSettings()">Simpan Pengaturan</button>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Manajemen Data</span></div>
+        <div class="stack-gap">
+          <button class="btn btn-outline" onclick="loadSampleData()">✨ Isi Data Contoh (Demo)</button>
+          <button class="btn btn-outline" onclick="exportBackupJSON()">⬇️ Backup Data (JSON)</button>
+          <label class="btn btn-outline" style="cursor:pointer">
+            ⬆️ Pulihkan Data (JSON)
+            <input type="file" accept=".json" style="display:none" onchange="importBackupJSON(event)" />
+          </label>
+          <button class="btn btn-danger-outline" onclick="resetAllData()">🗑️ Hapus Semua Data</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- BOTTOM NAVIGATION -->
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-tab="beranda" onclick="switchTab('beranda')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5.5v-6.5h-5V21H4a1 1 0 01-1-1v-9.5z"/></svg>
+        Beranda
+      </button>
+      <button class="nav-btn" data-tab="riwayat" onclick="switchTab('riwayat')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9h6m-6 4h4"/></svg>
+        Riwayat
+      </button>
+      <button class="nav-btn" data-tab="analisa" onclick="switchTab('analisa')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
+        Analisa
+      </button>
+      <button class="nav-btn" data-tab="profil" onclick="switchTab('profil')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+        Profil
+      </button>
+    </nav>
+  </div>
+
+  <!-- MODAL TRANSAKSI -->
+  <div class="modal-backdrop" id="txModal" onclick="closeModalOnBg(event, 'txModal')">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <span class="modal-title" id="txModalTitle">Catat Transaksi</span>
+        <button class="modal-close" onclick="closeModal('txModal')">×</button>
+      </div>
+      <div class="seg-toggle">
+        <button class="seg-btn" id="typeBtnMasuk" onclick="setTxType('masuk')">Pemasukan</button>
+        <button class="seg-btn" id="typeBtnKeluar" onclick="setTxType('keluar')">Pengeluaran</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nominal (Rp)</label>
+        <input type="number" class="input-field" id="txAmount" placeholder="0" inputmode="numeric" />
+        <div id="salaryQuickFill" style="margin-top:6px; display:none;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="fillDefaultSalary()">⚡ Isi Gaji Standar</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Kategori</label>
+        <select id="txCategory"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tanggal</label>
+        <input type="date" class="input-field" id="txDate" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catatan</label>
+        <input type="text" class="input-field" id="txNote" placeholder="Contoh: Makan siang, ongkos kerja, SPP..." />
+      </div>
+      <button class="btn btn-primary" onclick="submitTransaction()">Simpan Transaksi</button>
+    </div>
+  </div>
+
+  <!-- MODAL HUTANG -->
+  <div class="modal-backdrop" id="debtModal" onclick="closeModalOnBg(event, 'debtModal')">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <span class="modal-title">Catat Hutang Baru</span>
+        <button class="modal-close" onclick="closeModal('debtModal')">×</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nama / Pihak Pemberi Pinjaman</label>
+        <input type="text" class="input-field" id="debtName" placeholder="Contoh: Cicilan / Teman / Paylater" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nominal Hutang (Rp)</label>
+        <input type="number" class="input-field" id="debtAmount" placeholder="0" inputmode="numeric" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Jatuh Tempo</label>
+        <input type="date" class="input-field" id="debtDue" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catatan Tambahan</label>
+        <input type="text" class="input-field" id="debtNote" placeholder="Opsional" />
+      </div>
+      <button class="btn btn-primary" onclick="submitDebt()">Simpan Hutang</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
