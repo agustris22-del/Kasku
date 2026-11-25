@@ -1,14 +1,14 @@
 {
-  "name": "KasKu — Catatan Keuangan & Gajian",
+  "id": "/Kasku/",
+  "name": "KasKu - Catatan Keuangan",
   "short_name": "KasKu",
-  "description": "Aplikasi catatan gajian, pengeluaran harian, hutang, BBM, dan laporan PDF bulanan.",
+  "description": "Aplikasi catatan keuangan harian, pemasukan, pengeluaran, dan hutang.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#F4F6F8",
   "theme_color": "#059669",
-  "lang": "id",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "./icon-192.png",
