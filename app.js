@@ -31,6 +31,7 @@ let editingDebtId = null;
 let chart7DaysInstance = null;
 let chartCatInstance = null;
 let deferredInstallPrompt = null;
+let confirmCallback = null;
 
 function loadState() {
   try {
@@ -80,6 +81,45 @@ function bindRpInputs() {
       el.value = formatRpInput(el.value);
     });
   });
+}
+
+function initCustomConfirm() {
+  if (document.getElementById('customConfirmModal')) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-backdrop';
+  wrap.id = 'customConfirmModal';
+  wrap.style.alignItems = 'center';
+  wrap.style.padding = '20px';
+  wrap.onclick = (e) => { if (e.target.id === 'customConfirmModal') closeModal('customConfirmModal'); };
+  wrap.innerHTML = `
+    <div class="modal-sheet" style="border-radius:18px; padding:20px; max-width:360px;">
+      <div class="modal-header" style="margin-bottom:10px;">
+        <span class="modal-title" id="confirmModalTitle">Konfirmasi</span>
+        <button class="modal-close" onclick="closeModal('customConfirmModal')">×</button>
+      </div>
+      <p id="confirmModalMsg" style="font-size:14px; color:#475569; line-height:1.5; margin-bottom:18px;"></p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <button class="btn btn-outline" onclick="closeModal('customConfirmModal')">Batal</button>
+        <button class="btn btn-primary" id="confirmModalOkBtn">Ya</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  document.getElementById('confirmModalOkBtn').onclick = () => {
+    closeModal('customConfirmModal');
+    if (typeof confirmCallback === 'function') confirmCallback();
+  };
+}
+
+function showConfirm(title, message, onOk, okText = 'Ya', isDanger = false) {
+  initCustomConfirm();
+  document.getElementById('confirmModalTitle').textContent = title;
+  document.getElementById('confirmModalMsg').textContent = message;
+  const okBtn = document.getElementById('confirmModalOkBtn');
+  okBtn.textContent = okText;
+  okBtn.className = isDanger ? 'btn btn-danger-outline' : 'btn btn-primary';
+  confirmCallback = onOk;
+  document.getElementById('customConfirmModal').classList.add('open');
 }
 
 function formatShortDate(str) {
@@ -163,11 +203,12 @@ function submitTransaction() {
 }
 
 function deleteTransaction(id) {
-  if (!confirm('Hapus transaksi ini?')) return;
-  state.transactions = state.transactions.filter(t => t.id !== id);
-  saveState();
-  showToast('Transaksi dihapus');
-  renderAllActive();
+  showConfirm('Hapus Transaksi', 'Yakin ingin menghapus transaksi ini?', () => {
+    state.transactions = state.transactions.filter(t => t.id !== id);
+    saveState();
+    showToast('Transaksi dihapus');
+    renderAllActive();
+  }, 'Hapus', true);
 }
 
 function openDebtModal(id = null) {
@@ -216,26 +257,32 @@ function submitDebt() {
 function markDebtPaid(id) {
   const d = state.debts.find(x => x.id === id);
   if (!d) return;
-  const catat = confirm(`Tandai hutang "${d.name}" (${formatRp(d.amount)}) LUNAS?\n\nKlik OK untuk mencatatnya sebagai pengeluaran hari ini.`);
-  d.status = 'lunas';
-  d.paidDate = getLocalDateStr();
-  if (catat) {
-    state.transactions.unshift({
-      id: 'tx_' + Date.now(), type: 'keluar', amount: d.amount,
-      category: 'Bayar Hutang', date: getLocalDateStr(), note: 'Pelunasan: ' + d.name
-    });
-  }
-  saveState();
-  showToast('Hutang ditandai lunas');
-  renderAllActive();
+  showConfirm(
+    'Lunasi Hutang',
+    `Tandai hutang "${d.name}" (${formatRp(d.amount)}) LUNAS dan catat sebagai pengeluaran hari ini?`,
+    () => {
+      d.status = 'lunas';
+      d.paidDate = getLocalDateStr();
+      state.transactions.unshift({
+        id: 'tx_' + Date.now(), type: 'keluar', amount: d.amount,
+        category: 'Bayar Hutang', date: getLocalDateStr(), note: 'Pelunasan: ' + d.name
+      });
+      saveState();
+      showToast('Hutang ditandai lunas');
+      renderAllActive();
+    },
+    'Ya, Lunasi',
+    false
+  );
 }
 
 function deleteDebt(id) {
-  if (!confirm('Hapus catatan hutang ini?')) return;
-  state.debts = state.debts.filter(d => d.id !== id);
-  saveState();
-  showToast('Hutang dihapus');
-  renderAllActive();
+  showConfirm('Hapus Hutang', 'Yakin ingin menghapus catatan hutang ini?', () => {
+    state.debts = state.debts.filter(d => d.id !== id);
+    saveState();
+    showToast('Hutang dihapus');
+    renderAllActive();
+  }, 'Hapus', true);
 }
 
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -533,9 +580,10 @@ function importBackupJSON(e) {
 }
 
 function resetAllData() {
-  if (!confirm('Yakin hapus semua transaksi dan hutang?')) return;
-  state = JSON.parse(JSON.stringify(DEFAULT_STATE));
-  saveState(); showToast('Semua data direset'); renderAllActive();
+  showConfirm('Hapus Semua Data', 'Yakin ingin menghapus semua transaksi dan hutang? Data yang dihapus tidak bisa dikembalikan.', () => {
+    state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    saveState(); showToast('Semua data direset'); renderAllActive();
+  }, 'Hapus Semua', true);
 }
 
 function renderAllActive() {
@@ -544,6 +592,7 @@ function renderAllActive() {
 
 (function init() {
   bindRpInputs();
+  initCustomConfirm();
   document.getElementById('todayDateBadge').textContent = formatShortDate(getLocalDateStr());
   document.getElementById('analyticsMonth').value = getMonthStr();
   renderHome();
