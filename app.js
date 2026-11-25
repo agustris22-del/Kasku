@@ -12,6 +12,8 @@ const CAT_ICONS = {
   'Bayar Hutang': '📋', 'Lainnya': '📌'
 };
 
+const BULAN_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
 const DEFAULT_STATE = {
   transactions: [],
   debts: [],
@@ -55,6 +57,11 @@ function getLocalDateStr(d = new Date()) {
 }
 function getMonthStr(d = new Date()) { return getLocalDateStr(d).slice(0, 7); }
 
+function formatMonthLabel(ym) {
+  const [y, m] = (ym || getMonthStr()).split('-');
+  return `${BULAN_ID[Number(m) - 1] || ''} ${y}`;
+}
+
 function formatRp(num) {
   const n = Number(num) || 0;
   return (n < 0 ? '-Rp ' : 'Rp ') + new Intl.NumberFormat('id-ID').format(Math.abs(n));
@@ -81,6 +88,57 @@ function bindRpInputs() {
       el.value = formatRpInput(el.value);
     });
   });
+}
+
+function initCustomUI() {
+  // 1. Ubah teks Backup & Pulihkan Data (JSON) -> Keuanganmu
+  const profilPage = document.getElementById('page-profil');
+  if (profilPage) {
+    profilPage.querySelectorAll('button, label').forEach(el => {
+      if (el.textContent.includes('Backup Data')) {
+        el.textContent = '💾 Backup Data Keuanganmu';
+      } else if (el.textContent.includes('Pulihkan Data')) {
+        const input = el.querySelector('input');
+        el.textContent = '📂 Pulihkan Data Keuanganmu';
+        if (input) el.appendChild(input);
+      }
+    });
+  }
+
+  // 2. Ganti pemilih bulan bawaan browser dengan tombol geser bulan yang rapi
+  const monthInp = document.getElementById('analyticsMonth');
+  if (monthInp && !document.getElementById('customMonthPicker')) {
+    monthInp.style.display = 'none';
+    const picker = document.createElement('div');
+    picker.id = 'customMonthPicker';
+    picker.style.cssText = 'display:flex;align-items:center;justify-content:space-between;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:6px 10px;margin-top:6px;';
+    picker.innerHTML = `
+      <button type="button" onclick="shiftAnalyticsMonth(-1)" style="border:none;background:#FFFFFF;border-radius:8px;width:36px;height:36px;font-size:20px;font-weight:700;color:#059669;box-shadow:0 1px 3px rgba(0,0,0,0.08);cursor:pointer;">‹</button>
+      <span id="customMonthLabel" style="font-weight:700;font-size:14px;color:#0F172A;">${formatMonthLabel(monthInp.value)}</span>
+      <button type="button" onclick="shiftAnalyticsMonth(1)" style="border:none;background:#FFFFFF;border-radius:8px;width:36px;height:36px;font-size:20px;font-weight:700;color:#059669;box-shadow:0 1px 3px rgba(0,0,0,0.08);cursor:pointer;">›</button>
+    `;
+    monthInp.parentNode.insertBefore(picker, monthInp.nextSibling);
+  }
+
+  // 3. Tambahkan Copyright Agus Trisna di bagian paling bawah setiap halaman
+  document.querySelectorAll('.page').forEach(page => {
+    if (page.querySelector('.kasku-copyright')) return;
+    const footer = document.createElement('div');
+    footer.className = 'kasku-copyright';
+    footer.style.cssText = 'text-align:center;font-size:12px;color:#94A3B8;padding:18px 0 8px;';
+    footer.textContent = '© 2026 Agus Trisna';
+    page.appendChild(footer);
+  });
+}
+
+function shiftAnalyticsMonth(delta) {
+  const inp = document.getElementById('analyticsMonth');
+  const [y, m] = (inp.value || getMonthStr()).split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  inp.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const lbl = document.getElementById('customMonthLabel');
+  if (lbl) lbl.textContent = formatMonthLabel(inp.value);
+  renderAnalytics();
 }
 
 function initCustomConfirm() {
@@ -431,6 +489,8 @@ function renderAnalytics() {
   const inp = document.getElementById('analyticsMonth');
   if (!inp.value) inp.value = getMonthStr();
   const m = inp.value;
+  const lbl = document.getElementById('customMonthLabel');
+  if (lbl) lbl.textContent = formatMonthLabel(m);
 
   const txs = state.transactions.filter(t => t.date.startsWith(m));
   const totalIn = txs.filter(t => t.type === 'masuk').reduce((s, t) => s + t.amount, 0);
@@ -487,7 +547,7 @@ function exportMonthlyPDF() {
   const totalSchool = txs.filter(t => t.type === 'keluar' && t.category === 'Sekolah Anak').reduce((s, t) => s + t.amount, 0);
   const activeDebt = state.debts.filter(d => d.status !== 'lunas').reduce((s, d) => s + d.amount, 0);
 
-  doc.setFontSize(16); doc.text(`Laporan Keuangan Bulanan (${m})`, 14, 18);
+  doc.setFontSize(16); doc.text(`Laporan Keuangan Bulanan (${formatMonthLabel(m)})`, 14, 18);
   doc.setFontSize(10); doc.setTextColor(100);
   doc.text(`Akun: ${state.settings.userName} | Dicetak: ${formatShortDate(getLocalDateStr())}`, 14, 25);
 
@@ -559,9 +619,9 @@ function exportBackupJSON() {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `backup_kasku_${getLocalDateStr()}.json`;
+  a.download = `backup_keuanganmu_${getLocalDateStr()}.json`;
   a.click();
-  showToast('Backup diunduh');
+  showToast('Backup data keuanganmu diunduh');
 }
 
 function importBackupJSON(e) {
@@ -573,8 +633,8 @@ function importBackupJSON(e) {
       const p = JSON.parse(ev.target.result);
       if (!Array.isArray(p.transactions)) throw 0;
       state = { transactions: p.transactions, debts: p.debts || [], settings: { ...DEFAULT_STATE.settings, ...(p.settings || {}) } };
-      saveState(); showToast('Data dipulihkan'); renderAllActive();
-    } catch { showToast('File JSON tidak valid'); }
+      saveState(); showToast('Data keuanganmu dipulihkan'); renderAllActive();
+    } catch { showToast('File backup tidak valid'); }
   };
   r.readAsText(file);
 }
@@ -595,6 +655,7 @@ function renderAllActive() {
   initCustomConfirm();
   document.getElementById('todayDateBadge').textContent = formatShortDate(getLocalDateStr());
   document.getElementById('analyticsMonth').value = getMonthStr();
+  initCustomUI();
   renderHome();
 })();
 
