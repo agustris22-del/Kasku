@@ -27,6 +27,7 @@ const DEFAULT_STATE = {
 let state = loadState();
 let currentTxType = 'keluar';
 let currentHistoryFilter = 'semua';
+let editingDebtId = null;
 let chart7DaysInstance = null;
 let chartCatInstance = null;
 let deferredInstallPrompt = null;
@@ -56,6 +57,29 @@ function getMonthStr(d = new Date()) { return getLocalDateStr(d).slice(0, 7); }
 function formatRp(num) {
   const n = Number(num) || 0;
   return (n < 0 ? '-Rp ' : 'Rp ') + new Intl.NumberFormat('id-ID').format(Math.abs(n));
+}
+
+function parseRpInput(val) {
+  return Number(String(val || '').replace(/\D/g, '')) || 0;
+}
+
+function formatRpInput(val) {
+  const digits = String(val || '').replace(/\D/g, '');
+  if (!digits) return '';
+  return 'Rp ' + new Intl.NumberFormat('id-ID').format(Number(digits));
+}
+
+function bindRpInputs() {
+  ['txAmount', 'debtAmount', 'setTargetDaily', 'setTargetWeekly', 'setMonthBudget', 'setDefaultSalary'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.type = 'text';
+    el.inputMode = 'numeric';
+    el.placeholder = 'Rp 0';
+    el.addEventListener('input', () => {
+      el.value = formatRpInput(el.value);
+    });
+  });
 }
 
 function formatShortDate(str) {
@@ -119,13 +143,13 @@ function setTxType(type) {
 }
 
 function fillDefaultSalary() {
-  document.getElementById('txAmount').value = state.settings.defaultSalary || 0;
+  document.getElementById('txAmount').value = formatRpInput(state.settings.defaultSalary || 0);
   document.getElementById('txCategory').value = 'Gaji';
   document.getElementById('txNote').value = 'Gaji Bulanan';
 }
 
 function submitTransaction() {
-  const amount = Number(document.getElementById('txAmount').value);
+  const amount = parseRpInput(document.getElementById('txAmount').value);
   const category = document.getElementById('txCategory').value;
   const date = document.getElementById('txDate').value || getLocalDateStr();
   const note = document.getElementById('txNote').value.trim() || category;
@@ -146,25 +170,46 @@ function deleteTransaction(id) {
   renderAllActive();
 }
 
-function openDebtModal() {
-  document.getElementById('debtName').value = '';
-  document.getElementById('debtAmount').value = '';
-  document.getElementById('debtDue').value = getLocalDateStr();
-  document.getElementById('debtNote').value = '';
+function openDebtModal(id = null) {
+  editingDebtId = id;
+  const titleEl = document.querySelector('#debtModal .modal-title');
+  if (id) {
+    const d = state.debts.find(x => x.id === id);
+    if (!d) return;
+    titleEl.textContent = 'Ubah Catatan Hutang';
+    document.getElementById('debtName').value = d.name;
+    document.getElementById('debtAmount').value = formatRpInput(d.amount);
+    document.getElementById('debtDue').value = d.dueDate || getLocalDateStr();
+    document.getElementById('debtNote').value = d.note || '';
+  } else {
+    titleEl.textContent = 'Catat Hutang Baru';
+    document.getElementById('debtName').value = '';
+    document.getElementById('debtAmount').value = '';
+    document.getElementById('debtDue').value = getLocalDateStr();
+    document.getElementById('debtNote').value = '';
+  }
   document.getElementById('debtModal').classList.add('open');
 }
 
 function submitDebt() {
   const name = document.getElementById('debtName').value.trim();
-  const amount = Number(document.getElementById('debtAmount').value);
+  const amount = parseRpInput(document.getElementById('debtAmount').value);
   const dueDate = document.getElementById('debtDue').value || getLocalDateStr();
   const note = document.getElementById('debtNote').value.trim();
   if (!name || !amount || amount <= 0) return showToast('Lengkapi nama & nominal hutang');
 
-  state.debts.unshift({ id: 'db_' + Date.now(), name, amount, dueDate, note, status: 'belum' });
+  if (editingDebtId) {
+    const idx = state.debts.findIndex(x => x.id === editingDebtId);
+    if (idx !== -1) state.debts[idx] = { ...state.debts[idx], name, amount, dueDate, note };
+    editingDebtId = null;
+    showToast('Catatan hutang diperbarui');
+  } else {
+    state.debts.unshift({ id: 'db_' + Date.now(), name, amount, dueDate, note, status: 'belum' });
+    showToast('Hutang ditambahkan');
+  }
+
   saveState();
   closeModal('debtModal');
-  showToast('Hutang ditambahkan');
   renderAllActive();
 }
 
@@ -327,6 +372,7 @@ function renderDebts() {
         <span class="status-pill ${paid ? 'pill-paid' : 'pill-open'}">${paid ? 'Lunas' : 'Belum Lunas'}</span>
         <div style="display:flex;gap:6px">
           ${!paid ? `<button class="btn btn-primary btn-sm" onclick="markDebtPaid('${d.id}')">✓ Lunasi</button>` : ''}
+          <button class="btn btn-outline btn-sm" onclick="openDebtModal('${d.id}')">Ubah</button>
           <button class="btn btn-outline btn-sm" onclick="deleteDebt('${d.id}')">Hapus</button>
         </div>
       </div>
@@ -425,19 +471,19 @@ function exportMonthlyPDF() {
 function renderProfileForm() {
   const s = state.settings;
   document.getElementById('setUserName').value = s.userName;
-  document.getElementById('setTargetDaily').value = s.targetDaily;
-  document.getElementById('setTargetWeekly').value = s.targetWeekly;
-  document.getElementById('setMonthBudget').value = s.monthBudget;
-  document.getElementById('setDefaultSalary').value = s.defaultSalary;
+  document.getElementById('setTargetDaily').value = formatRpInput(s.targetDaily);
+  document.getElementById('setTargetWeekly').value = formatRpInput(s.targetWeekly);
+  document.getElementById('setMonthBudget').value = formatRpInput(s.monthBudget);
+  document.getElementById('setDefaultSalary').value = formatRpInput(s.defaultSalary);
 }
 
 function saveSettings() {
   state.settings = {
     userName: document.getElementById('setUserName').value.trim() || 'Catatan Keuangan Pribadi',
-    targetDaily: Number(document.getElementById('setTargetDaily').value) || 0,
-    targetWeekly: Number(document.getElementById('setTargetWeekly').value) || 0,
-    monthBudget: Number(document.getElementById('setMonthBudget').value) || 0,
-    defaultSalary: Number(document.getElementById('setDefaultSalary').value) || 0
+    targetDaily: parseRpInput(document.getElementById('setTargetDaily').value),
+    targetWeekly: parseRpInput(document.getElementById('setTargetWeekly').value),
+    monthBudget: parseRpInput(document.getElementById('setMonthBudget').value),
+    defaultSalary: parseRpInput(document.getElementById('setDefaultSalary').value)
   };
   saveState();
   showToast('Pengaturan disimpan');
@@ -497,6 +543,7 @@ function renderAllActive() {
 }
 
 (function init() {
+  bindRpInputs();
   document.getElementById('todayDateBadge').textContent = formatShortDate(getLocalDateStr());
   document.getElementById('analyticsMonth').value = getMonthStr();
   renderHome();

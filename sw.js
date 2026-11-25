@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kasku-pwa-v2';
+const CACHE_NAME = 'kasku-pwa-v3';
 
 const CORE_ASSETS = [
   './',
